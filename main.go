@@ -43,24 +43,30 @@ func socketSecretListen(ctx context.Context, client *api.Client, mount *api.KVv2
 			continue
 		}
 
+		defer func() {
+			if err = c.Close(); err != nil {
+				log.Print(err)
+			}
+		}()
+
 		log.Printf("Serving secret value for %s on socket %s", secret.VaultPath, sockPath)
 
 		obj, err := mount.Get(ctx, secret.VaultPath)
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			return
 		}
 		if secret.Field != "" {
-			value := string(secret.Field)
+			value := string(obj.Data[secret.Field])
 			if _, err = c.Write([]byte(value)); err != nil {
 				log.Print(err)
+				return
 			}
 		} else {
 			if _, err = c.Write([]byte(fmt.Sprintf("%+v", obj))); err != nil {
 				log.Print(err)
+				return
 			}
-		}
-		if err = c.Close(); err != nil {
-			log.Print(err)
 		}
 	}
 
