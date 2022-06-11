@@ -1,4 +1,4 @@
-module murf.org/damian/systemd-vault
+module murf.org/damian/systemd-credentials-vault
 
 go 1.18
 
