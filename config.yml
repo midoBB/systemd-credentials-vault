@@ -1,0 +1,13 @@
+#vault_server: https://vault.murf.dev
+socket_root: ./
+vault_mount: /kv
+
+secrets:
+
+- vault_path: /test-secret
+  socket_path: test-secret.sock
+  field: key-name
+
+- vault_path: /another-secret-path
+  socket_path: another-secret.sock
+  field: password
