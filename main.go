@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -87,9 +88,15 @@ func setupVault(app *App) error {
 	return nil
 }
 
+var (
+	configPath = flag.String("config", "config.yml", "YAML Configuration file.")
+)
+
 func main() {
 
-	config, err := newConfig("config.yml")
+	flag.Parse()
+
+	config, err := newConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Error reading configuration: %+v", err)
 	}
