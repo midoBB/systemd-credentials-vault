@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
@@ -30,6 +31,8 @@ func socketSecretListen(ctx context.Context, client *api.Client, mount *api.KVv2
 
 	log.Printf("Listening on %s for secret path %s", sockPath, secret.VaultPath)
 
+	// Ensure created unix sockets are mode 0700
+	syscall.Umask(0077)
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
 		log.Print(err)
