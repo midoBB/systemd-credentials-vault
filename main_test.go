@@ -21,12 +21,10 @@ func setupVaultServer(t *testing.T) (*api.Client, string, string) {
 	}
 
 	// Enable AppRole auth method
-	// TODO: cleanup
-	// err = client.Sys().EnableAuthWithOptions("approle-test", &api.EnableAuthOptions{Type: "approle"})
-	// if err != nil {
-	// 	t.Fatalf("failed to enable AppRole auth method: %v", err)
-	// }
-	// defer client.Sys().DisableAuth("auth/approle-test")
+	err = client.Sys().EnableAuthWithOptions("approle-test", &api.EnableAuthOptions{Type: "approle"})
+	if err != nil {
+		t.Fatalf("failed to enable AppRole auth method: %v", err)
+	}
 
 	// Create AppRole
 	roleName := "test-role"
@@ -60,8 +58,7 @@ func setupVaultServer(t *testing.T) (*api.Client, string, string) {
 	}
 
 	// Create Service Secret
-	// err = client.Sys().Mount("secrets-test", &api.MountInput{Type: "kv-v2"})
-	// defer client.Sys().Unmount("secrets-test")
+	err = client.Sys().Mount("secrets-test", &api.MountInput{Type: "kv-v2"})
 	if err != nil {
 		t.Fatalf("failed to create secrets engine: %v", err)
 	}
@@ -140,6 +137,9 @@ func testKVSecret(t *testing.T, conn net.Conn) error {
 func TestVaultCredentialServer(t *testing.T) {
 	// Set up Vault server for testing
 	client, roleID, secretID := setupVaultServer(t)
+	defer client.Sys().DisableAuth("approle-test")
+	defer client.KVv2("secrets-test").Delete(context.Background(), "test-secret")
+	defer client.Sys().Unmount("secrets-test")
 
 	// Create temporary Unix socket
 	socketPath := "/tmp/test_socket"
