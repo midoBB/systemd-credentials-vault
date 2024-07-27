@@ -2,6 +2,8 @@
 
 This Go package provides a server for retrieving credentials from HashiCorp Vault. The server listens on a Unix socket and responds to requests for specific credentials.
 
+This was the first time I've ever worked with Golang (and sockets) so please let me know where I could improve my code.
+
 ## Features
 
 - Connects to a Vault server to fetch credentials.
@@ -76,3 +78,7 @@ or for generic secrets:
   ```
   echo -n "secrets/app_secret/password" | nc -U /run/vault-credentials.socket
   ```
+## Acknowledgments
+
+- [Damomurf's systemd-credentials-vault](https://github.com/damomurf/systemd-credentials-vault): Provided a template and initial inspiration for extending this Golang application.
+- [Medium article by Umglurf](https://medium.com/@umglurf/using-systemd-credentials-to-pass-secrets-from-hashicorp-vault-to-systemd-services-928f0e804518): Offered a Python script that was integrated into the original repository and guided further development.
