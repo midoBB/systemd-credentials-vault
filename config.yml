@@ -1,13 +1,7 @@
-#vault_server: https://vault.murf.dev
-socket_root: ./
-vault_mount: /kv
+vault_server: http://localhost:8200
+socket_location: /run/vault-credentials.socket
+vault_mount: /secrets
+vault_approle: approle
 
-secrets:
-
-- vault_path: /test-secret
-  socket_path: test-secret.sock
-  field: key-name
-
-- vault_path: /another-secret-path
-  socket_path: another-secret.sock
-  field: password
+approle_id: foo
+secret_id_path: /etc/vault/secret_id
