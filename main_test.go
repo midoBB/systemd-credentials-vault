@@ -147,7 +147,6 @@ func TestVaultCredentialServer(t *testing.T) {
 	server, err := NewVaultCredentialServer(&Config{
 		VaultServer:    &client.CloneConfig().Address,
 		VaultApprole:   "approle-test",
-		VaultMount:     "/secrets",
 		SocketLocation: socketPath,
 		RoleId:         roleID,
 		SecretIdPath:   secretID,

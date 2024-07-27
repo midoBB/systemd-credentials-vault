@@ -8,10 +8,9 @@ import (
 )
 
 type Config struct {
-	VaultServer    *string `yaml:"vault_server"`  // Address of the Vault server
-	SocketLocation string  `yaml:"socket_root"`   // The base path in which Unix sockets will be created
-	VaultMount     string  `yaml:"vault_mount"`   // The Secret Mount within vault to look for secrets
-	VaultApprole   string  `yaml:"vault_approle"` // The AppRole being queried
+	VaultServer    *string `yaml:"vault_server"`    // Address of the Vault server
+	SocketLocation string  `yaml:"socket_location"` // The base path in which Unix sockets will be created
+	VaultApprole   string  `yaml:"vault_approle"`   // The AppRole being queried
 
 	RoleId       string `yaml:"role_id"`        // The role ID
 	SecretIdPath string `yaml:"secret_id_path"` // The secret ID path
