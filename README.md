@@ -64,6 +64,8 @@ or for generic secrets:
 
 ### Example Requests
 
+#### Via CLI
+
 - To get an AppRole Role ID:
   ```
   echo -n "myservice/role-id" | nc -U /run/vault-credentials.socket
@@ -78,7 +80,12 @@ or for generic secrets:
   ```
   echo -n "secrets/app_secret/password" | nc -U /run/vault-credentials.socket
   ```
+
+#### Via Systemd Unit
+LoadCredential=services.%N.secret:/run/vault-credentials.socket
+
 ## Acknowledgments
 
-- [Damomurf's systemd-credentials-vault](https://github.com/damomurf/systemd-credentials-vault): Provided a template and initial inspiration for extending this Golang application.
+- [Damomurf's systemd-credentials-vault](https://github.com/damomurf/systemd-credentials-vault): Provided a template and initial inspiration for extending this Golang application to work with LoadCredentials
 - [Medium article by Umglurf](https://medium.com/@umglurf/using-systemd-credentials-to-pass-secrets-from-hashicorp-vault-to-systemd-services-928f0e804518): Offered a Python script that was integrated into the original repository and guided further development.
+- [arianvp's systemd creds](https://github.com/arianvp/systemd-creds) has an example of how LoadCredentials sends its Network Addr
