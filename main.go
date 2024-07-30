@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -15,8 +17,8 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/api/auth/approle"
 	"github.com/pkg/errors"
+	"github.com/spatialcurrent/go-stringify/pkg/stringify"
 	"golang.org/x/sync/errgroup"
-	// reuse "github.com/portmapping/go-reuse"
 )
 
 type VaultCredentialServer struct {
@@ -27,7 +29,6 @@ type VaultCredentialServer struct {
 }
 
 func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
-
 	apiConfig := api.DefaultConfig()
 	if config.VaultServer != nil {
 		apiConfig.Address = *config.VaultServer
@@ -81,7 +82,6 @@ func (vcs *VaultCredentialServer) Run(ctx context.Context) error {
 
 func (vcs *VaultCredentialServer) startServer(ctx context.Context) error {
 	for {
-		// This only accepts once and halts after the 2nd request
 		conn, err := vcs.socket.Accept()
 		if err != nil {
 			select {
@@ -97,36 +97,49 @@ func (vcs *VaultCredentialServer) startServer(ctx context.Context) error {
 }
 
 func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net.Conn) {
+	defer conn.Close()
+	unixAddr, ok := conn.RemoteAddr().(*net.UnixAddr)
+	if !ok {
+		log.Printf("Failed to get peer name: %s", unixAddr.Name)
+		return
+	}
+
+	var err error
+	var value string
+
+	if unixAddr.Name == "@" {
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
 		log.Printf("failed to read from connection: %v", err)
 		return
 	}
-	defer conn.Close()
 
-	request := string(buf[:n])
-	parts := strings.Split(request, "/")
-	if len(parts) < 2 {
-		log.Printf("invalid request: %s", request)
+		value = string(buf[:n])
+	} else {
+		_, credential, ok := parsePeerName(unixAddr.Name)
+
+		if !ok {
+			log.Printf("Failed to parse peer name: %s", unixAddr.Name)
 		return
 	}
 
+		value = credential
+	}
+
+	parts := strings.Split(value, ".")
 	service, credential := parts[0], parts[1]
 
-	var value string
 	switch credential {
 	case "role-id":
 		value, err = vcs.getVaultAppRoleID(service)
 	case "secret-id":
 		value, err = vcs.getVaultAppRoleSecretID(service)
+	case "creds":
+		mount, _, roleName := service, credential, parts[2]
+		value, err = vcs.createVaultDatabaseCreds(mount, roleName)
 	default:
-		if len(parts) < 3 {
-			log.Printf("invalid request: %s", request)
-			return
-		}
-		mount, secretName, key := parts[0], parts[1], parts[2]
-
+		mount, secretName, key := service, credential, parts[2]
 		value, err = vcs.getVaultServerSecret(mount, secretName, key)
 	}
 
@@ -138,6 +151,21 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 	conn.Write([]byte(value))
 }
 
+// parsePeerName parses the peer name of a unix socket connection as per the
+// documentation of LoadCredential=
+func parsePeerName(s string) (string, string, bool) {
+	print("\n", s, "\n")
+	// NOTE: Apparently in Go abtract socket names are prefixed with @ instead of 0x00
+	matches := regexp.MustCompile("^@.*/unit/(.*)/(.*)$").FindStringSubmatch(s)
+	if matches == nil {
+		return "", "", false
+	}
+	unitName := matches[1]
+	credID := matches[2]
+
+	return unitName, credID, true
+}
+
 func (vcs *VaultCredentialServer) vaultLogin(ctx context.Context) error {
 	roleID, secretID := vcs.getVaultCredentials()
 
@@ -145,11 +173,7 @@ func (vcs *VaultCredentialServer) vaultLogin(ctx context.Context) error {
 		return errors.New("Role ID not provided")
 	}
 
-	appRoleAuth, err := approle.NewAppRoleAuth(
-		roleID,
-		secretID,
-		approle.WithWrappingToken(), // Only required if the secret ID is response-wrapped.
-	)
+	appRoleAuth, err := approle.NewAppRoleAuth(roleID, secretID)
 	if err != nil {
 		return fmt.Errorf("failed to create AppRoleAuth: %v", err)
 	}
@@ -212,6 +236,25 @@ func (vcs *VaultCredentialServer) getVaultServerSecret(mount, secretName string,
 	}
 
 	return value, nil
+}
+
+var stringer = stringify.NewStringer("-", true, false, false)
+
+func (vcs *VaultCredentialServer) createVaultDatabaseCreds(mount string, role string) (string, error) {
+	path := fmt.Sprintf("%s/creds/%s", mount, role)
+
+	secret, err := vcs.client.Logical().Read(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to create auth for %v: %v", mount, err)
+	}
+
+	value, err := json.Marshal(secret.Data)
+	print(value)
+	if err != nil {
+		return "", fmt.Errorf("could not read secret data: %v", role)
+	}
+
+	return fmt.Sprintf("%s", value), nil
 }
 
 func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.SecretID) {
