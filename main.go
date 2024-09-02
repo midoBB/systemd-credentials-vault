@@ -107,25 +107,25 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 	var value string
 
 	if unixAddr.Name == "@" {
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		log.Printf("failed to read from connection: %v", err)
-		return
-	}
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.Printf("failed to read from connection: %v", err)
+			return
+		}
 
 		value = string(buf[:n])
 	} else {
 		_, credential, ok := parsePeerName(unixAddr.Name)
-
 		if !ok {
 			log.Printf("Failed to parse peer name: %s", unixAddr.Name)
-		return
-	}
+			return
+		}
 
 		value = credential
 	}
 
+	print("!!!!\n", value, "\n!!!!")
 	parts := strings.Split(value, ".")
 	service, credential := parts[0], parts[1]
 
@@ -134,9 +134,13 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 		value, err = vcs.getVaultAppRoleID(service)
 	case "secret-id":
 		value, err = vcs.getVaultAppRoleSecretID(service)
+	// How do I combine these cases?
 	case "creds":
-		mount, _, roleName := service, credential, parts[2]
-		value, err = vcs.createVaultDatabaseCreds(mount, roleName)
+		mount, credType, roleName := service, credential, parts[2]
+		value, err = vcs.createVaultDatabaseCreds(mount, credType, roleName)
+	case "static-cred":
+		mount, credType, roleName := service, credential, parts[2]
+		value, err = vcs.createVaultDatabaseCreds(mount, credType, roleName)
 	default:
 		mount, secretName, key := service, credential, parts[2]
 		value, err = vcs.getVaultServerSecret(mount, secretName, key)
@@ -237,23 +241,24 @@ func (vcs *VaultCredentialServer) getVaultServerSecret(mount, secretName string,
 	return value, nil
 }
 
-var stringer = stringify.NewStringer("-", true, false, false)
-
-func (vcs *VaultCredentialServer) createVaultDatabaseCreds(mount string, role string) (string, error) {
-	path := fmt.Sprintf("%s/creds/%s", mount, role)
-
+func (vcs *VaultCredentialServer) createVaultDatabaseCreds(mount string, credType string, role string) (string, error) {
+	path := fmt.Sprintf("%s/%s/%s", mount, credType, role)
+	print(path)
 	secret, err := vcs.client.Logical().Read(path)
+
 	if err != nil {
 		return "", fmt.Errorf("failed to create auth for %v: %v", mount, err)
 	}
 
+	if secret == nil {
+		return "", fmt.Errorf("failed to retrieve auth for %v", mount)
+	}
+
 	value, err := json.Marshal(secret.Data)
-	print(value)
 	if err != nil {
 		return "", fmt.Errorf("could not read secret data: %v", role)
 	}
-
-	return fmt.Sprintf("%s", value), nil
+	return string(value), nil
 }
 
 func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.SecretID) {

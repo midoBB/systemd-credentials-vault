@@ -72,7 +72,7 @@ func setupVaultServer(t *testing.T) (*api.Client, string, string) {
 
 func testRoleId(t *testing.T, conn net.Conn, expected string) error {
 	// Send a request for role-id
-	_, err := conn.Write([]byte("test-role/role-id"))
+	_, err := conn.Write([]byte("test-role.role-id"))
 	if err != nil {
 		t.Fatalf("failed to send request: %v", err)
 	}
@@ -94,7 +94,7 @@ func testRoleId(t *testing.T, conn net.Conn, expected string) error {
 
 func testSecretId(t *testing.T, conn net.Conn) error {
 	// Send a request for role-id
-	_, err := conn.Write([]byte("test-role/secret-id"))
+	_, err := conn.Write([]byte("test-role.secret-id"))
 	if err != nil {
 		t.Fatalf("failed to send request: %v", err)
 	}
@@ -115,7 +115,7 @@ func testSecretId(t *testing.T, conn net.Conn) error {
 
 func testKVSecret(t *testing.T, conn net.Conn) error {
 	// Send a request for a secret
-	_, err := conn.Write([]byte("secrets-test/test-secret/foo"))
+	_, err := conn.Write([]byte("secrets-test.test-secret.foo"))
 	if err != nil {
 		t.Fatalf("failed to send request: %v", err)
 	}
