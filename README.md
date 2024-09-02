@@ -84,6 +84,9 @@ or for generic secrets:
 #### Via Systemd Unit
 LoadCredential=services.%N.secret:/run/vault-credentials.socket
 
+## Testing
+Supply Vault URL and Token using environment variables: `VAULT_ADDR= VAULT_TOKEN= go test`. The test suite connects to Vault, creates an approle, and retrieves a secret via the agent.
+
 ## Acknowledgments
 
 - [Damomurf's systemd-credentials-vault](https://github.com/damomurf/systemd-credentials-vault): Provided a template and initial inspiration for extending this Golang application to be more versatile.

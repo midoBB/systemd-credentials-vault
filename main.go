@@ -90,7 +90,6 @@ func (vcs *VaultCredentialServer) startServer(ctx context.Context) error {
 				return fmt.Errorf("failed to accept connection: %v", err)
 			}
 		}
-
 		go vcs.handleConnection(ctx, conn)
 	}
 }
@@ -98,14 +97,15 @@ func (vcs *VaultCredentialServer) startServer(ctx context.Context) error {
 func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	unixAddr, ok := conn.RemoteAddr().(*net.UnixAddr)
+
 	if !ok {
 		log.Printf("Failed to get peer name: %s", unixAddr.Name)
 		return
 	}
+	log.Print("---")
+	log.Printf("Connection from: %s", unixAddr.Name)
 
-	var err error
 	var value string
-
 	if unixAddr.Name == "@" {
 		buf := make([]byte, 1024)
 		n, err := conn.Read(buf)
@@ -125,10 +125,11 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 		value = credential
 	}
 
-	print("!!!!\n", value, "\n!!!!")
 	parts := strings.Split(value, ".")
-	service, credential := parts[0], parts[1]
+	service, credential, roleNameOrKey := parts[0], parts[1], parts[2]
 
+	log.Printf("Request - %s", value)
+	var err error
 	switch credential {
 	case "role-id":
 		value, err = vcs.getVaultAppRoleID(service)
@@ -136,13 +137,13 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 		value, err = vcs.getVaultAppRoleSecretID(service)
 	// How do I combine these cases?
 	case "creds":
-		mount, credType, roleName := service, credential, parts[2]
+		mount, credType, roleName := service, credential, roleNameOrKey
 		value, err = vcs.createVaultDatabaseCreds(mount, credType, roleName)
 	case "static-cred":
-		mount, credType, roleName := service, credential, parts[2]
+		mount, credType, roleName := service, credential, roleNameOrKey
 		value, err = vcs.createVaultDatabaseCreds(mount, credType, roleName)
 	default:
-		mount, secretName, key := service, credential, parts[2]
+		mount, secretName, key := service, credential, roleNameOrKey
 		value, err = vcs.getVaultServerSecret(mount, secretName, key)
 	}
 
@@ -157,8 +158,7 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 // parsePeerName parses the peer name of a unix socket connection as per the
 // documentation of LoadCredential=
 func parsePeerName(s string) (string, string, bool) {
-	print("\n", s, "\n")
-	// NOTE: Apparently in Go abtract socket names are prefixed with @ instead of 0x00
+	// NOTE: Apparently in Go abstract socket names are prefixed with @ instead of 0x00
 	matches := regexp.MustCompile("^@.*/unit/(.*)/(.*)$").FindStringSubmatch(s)
 	if matches == nil {
 		return "", "", false
@@ -243,7 +243,6 @@ func (vcs *VaultCredentialServer) getVaultServerSecret(mount, secretName string,
 
 func (vcs *VaultCredentialServer) createVaultDatabaseCreds(mount string, credType string, role string) (string, error) {
 	path := fmt.Sprintf("%s/%s/%s", mount, credType, role)
-	print(path)
 	secret, err := vcs.client.Logical().Read(path)
 
 	if err != nil {
