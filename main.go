@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/api/auth/approle"
 	"github.com/pkg/errors"
-	"github.com/spatialcurrent/go-stringify/pkg/stringify"
 	"golang.org/x/sync/errgroup"
 )
 
