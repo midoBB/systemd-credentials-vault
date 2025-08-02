@@ -3,5 +3,5 @@ socket_location: /run/vault-credentials.socket
 vault_mount: /secrets
 vault_approle: approle
 
-approle_id: foo
+role_id: foo
 secret_id_path: /etc/vault/secret_id

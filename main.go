@@ -66,11 +66,6 @@ func (vcs *VaultCredentialServer) Run(ctx context.Context) error {
 		return vcs.startServer(ctx)
 	})
 
-	// Handle system signals for graceful shutdown
-	g.Go(func() error {
-		return vcs.handleSignals(ctx)
-	})
-
 	// Perform Vault login and token renewal
 	g.Go(func() error {
 		return vcs.vaultLogin(ctx)
@@ -99,7 +94,7 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 	unixAddr, ok := conn.RemoteAddr().(*net.UnixAddr)
 
 	if !ok {
-		log.Printf("Failed to get peer name: %s", unixAddr.Name)
+		log.Printf("Failed to get peer name")
 		return
 	}
 	log.Print("---")
@@ -126,6 +121,10 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 	}
 
 	parts := strings.Split(value, ".")
+	if len(parts) != 3 {
+		log.Printf("Invalid credential request: %s", value)
+		return
+	}
 	service, credential, roleNameOrKey := parts[0], parts[1], parts[2]
 
 	log.Printf("Request - %s", value)
@@ -152,7 +151,7 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 		return
 	}
 
-	conn.Write([]byte(value))
+	_, _ = conn.Write([]byte(value)) // XXX: Is it safe to ignore the error here?
 }
 
 // parsePeerName parses the peer name of a unix socket connection as per the
@@ -227,24 +226,29 @@ func (vcs *VaultCredentialServer) getVaultAppRoleSecretID(service string) (strin
 	return value, nil
 }
 
-func (vcs *VaultCredentialServer) getVaultServerSecret(mount, secretName string, key string) (string, error) {
+func (vcs *VaultCredentialServer) getVaultServerSecret(
+	mount, secretName string,
+	key string,
+) (string, error) {
 	secret, err := vcs.client.KVv2(mount).Get(context.Background(), secretName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get service secret: %v", err)
 	}
 
-	value, ok := secret.Raw.Data["data"].(map[string]interface{})[key].(string)
+	value, ok := secret.Raw.Data["data"].(map[string]any)[key].(string)
 	if !ok {
 		return "", fmt.Errorf("credential %s not found in secret data", key)
 	}
-
 	return value, nil
 }
 
-func (vcs *VaultCredentialServer) createVaultDatabaseCreds(mount string, credType string, role string) (string, error) {
+func (vcs *VaultCredentialServer) createVaultDatabaseCreds(
+	mount string,
+	credType string,
+	role string,
+) (string, error) {
 	path := fmt.Sprintf("%s/%s/%s", mount, credType, role)
 	secret, err := vcs.client.Logical().Read(path)
-
 	if err != nil {
 		return "", fmt.Errorf("failed to create auth for %v: %v", mount, err)
 	}
@@ -266,19 +270,6 @@ func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.Secret
 	return string(vcs.config.RoleId), secretID
 }
 
-func (vcs *VaultCredentialServer) handleSignals(ctx context.Context) error {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case sig := <-sigCh:
-		log.Printf("Received signal: %s, shutting down...", sig)
-		return vcs.shutdown()
-	}
-}
-
 func (vcs *VaultCredentialServer) shutdown() error {
 	if err := vcs.socket.Close(); err != nil {
 		return fmt.Errorf("failed to close socket: %v", err)
@@ -286,12 +277,9 @@ func (vcs *VaultCredentialServer) shutdown() error {
 	return nil
 }
 
-var (
-	configPath = flag.String("config", "config.yml", "YAML Configuration file.")
-)
+var configPath = flag.String("config", "config.yml", "YAML Configuration file.")
 
 func main() {
-
 	flag.Parse()
 
 	config, err := newConfig(*configPath)
@@ -306,7 +294,21 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := server.Run(ctx); err != nil {
+	// Setup signal handling
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigCh
+		log.Printf("Received signal: %s, shutting down...", sig)
+		context.CancelFunc(cancel)()
+		_ = server.shutdown() // XXX: Is it safe to ignore the error here?
+		cancel()
+	}()
+
+	if err := server.Run(ctx); err != nil && err != context.Canceled {
 		log.Fatalf("server error: %v", err)
 	}
+
+	log.Println("Server shutdown complete")
 }

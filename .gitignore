@@ -1,3 +1,4 @@
 *.sock
 systemd-credentials-vault
+config.yml
 
