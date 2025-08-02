@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -32,7 +33,36 @@ func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
 	if config.VaultServer != nil {
 		apiConfig.Address = *config.VaultServer
 	}
+	// Printing env vars
+	env := os.Environ()
+	envMap := make(map[string]string)
+	for _, e := range env {
+		pair := strings.SplitN(e, "=", 2)
+		envMap[pair[0]] = pair[1]
+	}
 
+	// If no CREDENTIALS_DIRECTORY is provided exit with an error
+	if _, ok := envMap["CREDENTIALS_DIRECTORY"]; !ok {
+		return nil, errors.New("CREDENTIALS_DIRECTORY not provided")
+	}
+
+	credDir := envMap["CREDENTIALS_DIRECTORY"]
+	files, err := os.ReadDir(credDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read credentials directory: %v", err)
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		fmt.Printf("File: %s\n", file.Name())
+		filePath := filepath.Join(credDir, file.Name())
+		secretID, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read secret ID file: %v", err)
+		}
+		config.SecretId = string(secretID)
+	}
 	client, err := api.NewClient(apiConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating Vault API client")
@@ -189,7 +219,9 @@ func (vcs *VaultCredentialServer) vaultLogin(ctx context.Context) error {
 
 	leaseDuration := secret.Auth.LeaseDuration
 	time.AfterFunc(time.Duration(leaseDuration)*time.Second*7/10, func() {
-		vcs.vaultLogin(ctx)
+		if err := vcs.vaultLogin(ctx); err != nil {
+			fmt.Printf("Error logging in: %v\n", err)
+		}
 	})
 
 	return nil
@@ -265,7 +297,7 @@ func (vcs *VaultCredentialServer) createVaultDatabaseCreds(
 }
 
 func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.SecretID) {
-	secretID := &approle.SecretID{FromFile: vcs.config.SecretIdPath}
+	secretID := &approle.SecretID{FromString: vcs.config.SecretId}
 
 	return string(vcs.config.RoleId), secretID
 }

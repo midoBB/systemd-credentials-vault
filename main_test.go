@@ -11,28 +11,29 @@ import (
 	"github.com/hashicorp/vault/api"
 )
 
-func setupVaultServer(t *testing.T) (*api.Client, string, string) {
+func setupVaultServer(t *testing.T) (*api.Client, string) {
 	// Set up a Vault client and create necessary roles and secrets for testing
 	config := api.DefaultConfig()
 	client, err := api.NewClient(config)
-
 	if err != nil {
 		t.Fatalf("failed to create Vault client: %v", err)
 	}
 
 	// Enable AppRole auth method
-	err = client.Sys().EnableAuthWithOptions("approle-test", &api.EnableAuthOptions{Type: "approle"})
+	err = client.Sys().
+		EnableAuthWithOptions("approle-test", &api.EnableAuthOptions{Type: "approle"})
 	if err != nil {
 		t.Fatalf("failed to enable AppRole auth method: %v", err)
 	}
 
 	// Create AppRole
 	roleName := "test-role"
-	_, err = client.Logical().Write(fmt.Sprintf("auth/approle-test/role/%s", roleName), map[string]interface{}{
-		"secret_id_ttl": "1m",
-		"token_ttl":     "2m",
-		"token_max_ttl": "3m",
-	})
+	_, err = client.Logical().
+		Write(fmt.Sprintf("auth/approle-test/role/%s", roleName), map[string]interface{}{
+			"secret_id_ttl": "1m",
+			"token_ttl":     "2m",
+			"token_max_ttl": "3m",
+		})
 	if err != nil {
 		t.Fatalf("failed to create AppRole: %v", err)
 	}
@@ -48,11 +49,12 @@ func setupVaultServer(t *testing.T) (*api.Client, string, string) {
 	}
 
 	// Create Secret ID
-	secret, err = client.Logical().Write(fmt.Sprintf("auth/approle-test/role/%s/secret-id", roleName), nil)
+	secret, err = client.Logical().
+		Write(fmt.Sprintf("auth/approle-test/role/%s/secret-id", roleName), nil)
 	if err != nil {
 		t.Fatalf("failed to create Secret ID: %v", err)
 	}
-	secretID, ok := secret.Data["secret_id"].(string)
+	_, ok = secret.Data["secret_id"].(string)
 	if !ok {
 		t.Fatalf("secret_id not found in response")
 	}
@@ -62,12 +64,13 @@ func setupVaultServer(t *testing.T) (*api.Client, string, string) {
 	if err != nil {
 		t.Fatalf("failed to create secrets engine: %v", err)
 	}
-	_, err = client.KVv2("secrets-test").Put(context.Background(), "test-secret", map[string]interface{}{"foo": "bar"})
+	_, err = client.KVv2("secrets-test").
+		Put(context.Background(), "test-secret", map[string]interface{}{"foo": "bar"})
 	if err != nil {
 		t.Fatalf("failed to write secret: %v", err)
 	}
 
-	return client, roleID, secretID
+	return client, roleID
 }
 
 func testRoleId(t *testing.T, conn net.Conn, expected string) error {
@@ -136,7 +139,7 @@ func testKVSecret(t *testing.T, conn net.Conn) error {
 
 func TestVaultCredentialServer(t *testing.T) {
 	// Set up Vault server for testing
-	client, roleID, secretID := setupVaultServer(t)
+	client, roleID /* secretID */ := setupVaultServer(t)
 	defer client.Sys().DisableAuth("approle-test")
 	defer client.KVv2("secrets-test").Delete(context.Background(), "test-secret")
 	defer client.Sys().Unmount("secrets-test")
@@ -149,7 +152,7 @@ func TestVaultCredentialServer(t *testing.T) {
 		VaultApprole:   "approle-test",
 		SocketLocation: socketPath,
 		RoleId:         roleID,
-		SecretIdPath:   secretID,
+		// SecretIdPath:   secretID,
 	})
 	if err != nil {
 		t.Fatalf("failed to create VaultCredentialServer: %v", err)
