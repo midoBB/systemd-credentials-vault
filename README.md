@@ -21,24 +21,28 @@ This was the first time I've ever worked with Golang (and sockets) so please let
 The server requires a configuration file in YAML format. The path to this file should be provided using the `-config` flag when running the server.
 
 Example `config.yml`:
+
 ```yaml
 vault_server: http://localhost:8200
 socket_location: /run/vault-credentials.socket
+vault_mount: /secrets
 vault_approle: approle
 
-approle_id: 0000-0000-0000-0000
-secret_id_path: /etc/vault/secret_id
+role_id: 0000-0000-0000-0000
+secret_id_name: secret_id
 ```
 
 ## Installation
 
 1. Clone the repository:
+
    ```sh
    git clone https://github.com/strass/systemd-credentials-vault
    cd vault-credential-server
    ```
 
 2. Build the server:
+
    ```sh
    go build .
    ```
@@ -67,11 +71,13 @@ or for generic secrets:
 #### Via CLI
 
 - To get an AppRole Role ID:
+
   ```
   echo -n "myservice/role-id" | nc -U /run/vault-credentials.socket
   ```
 
 - To get an AppRole Secret ID:
+
   ```
   echo -n "myservice/secret-id" | nc -U /run/vault-credentials.socket
   ```
@@ -82,9 +88,11 @@ or for generic secrets:
   ```
 
 #### Via Systemd Unit
+
 LoadCredential=services.%N.secret:/run/vault-credentials.socket
 
 ## Testing
+
 Supply Vault URL and Token using environment variables: `VAULT_ADDR= VAULT_TOKEN= go test`. The test suite connects to Vault, creates an approle, and retrieves a secret via the agent.
 
 ## Acknowledgments

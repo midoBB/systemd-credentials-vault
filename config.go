@@ -12,7 +12,8 @@ type Config struct {
 	SocketLocation string  `yaml:"socket_location"` // The base path in which Unix sockets will be created
 	VaultApprole   string  `yaml:"vault_approle"`   // The AppRole being queried
 	RoleId         string  `yaml:"role_id"`         // The role ID
-	SecretId       string  // The path to the secret ID file NOTE: This is gotten at runtime from CREDENTIALS_DIRECTORY
+	SecretIdName   string  `yaml:"secret_id_name"`  // The path to the secret ID inside $CREDENTIALS_DIRECTORY
+	SecretFilePath string  `yaml:"-"`               // The entire constructed path to the secret file inside $CREDENTIALS_DIRECTORY
 }
 
 func newConfig(path string) (*Config, error) {

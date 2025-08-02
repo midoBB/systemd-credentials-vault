@@ -33,36 +33,16 @@ func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
 	if config.VaultServer != nil {
 		apiConfig.Address = *config.VaultServer
 	}
-	// Printing env vars
-	env := os.Environ()
-	envMap := make(map[string]string)
-	for _, e := range env {
-		pair := strings.SplitN(e, "=", 2)
-		envMap[pair[0]] = pair[1]
-	}
 
 	// If no CREDENTIALS_DIRECTORY is provided exit with an error
-	if _, ok := envMap["CREDENTIALS_DIRECTORY"]; !ok {
-		return nil, errors.New("CREDENTIALS_DIRECTORY not provided")
+	if _, ok := os.LookupEnv("CREDENTIALS_DIRECTORY"); !ok {
+		return nil, errors.New(
+			"CREDENTIALS_DIRECTORY not provided, This program is meant to be run inside a systemd service unit context",
+		)
 	}
 
-	credDir := envMap["CREDENTIALS_DIRECTORY"]
-	files, err := os.ReadDir(credDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read credentials directory: %v", err)
-	}
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		fmt.Printf("File: %s\n", file.Name())
-		filePath := filepath.Join(credDir, file.Name())
-		secretID, err := os.ReadFile(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read secret ID file: %v", err)
-		}
-		config.SecretId = string(secretID)
-	}
+	config.SecretFilePath = filepath.Join(os.Getenv("CREDENTIALS_DIRECTORY"), config.SecretIdName)
+
 	client, err := api.NewClient(apiConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating Vault API client")
@@ -297,7 +277,7 @@ func (vcs *VaultCredentialServer) createVaultDatabaseCreds(
 }
 
 func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.SecretID) {
-	secretID := &approle.SecretID{FromString: vcs.config.SecretId}
+	secretID := &approle.SecretID{FromFile: vcs.config.SecretFilePath}
 
 	return string(vcs.config.RoleId), secretID
 }
@@ -308,11 +288,38 @@ func (vcs *VaultCredentialServer) shutdown() error {
 	}
 	return nil
 }
+func getUcred(conn net.Conn) (*syscall.Ucred, error) {
+    raw, err := conn.(*net.UnixConn).SyscallConn()
+    if err != nil {
+        return nil, err
+    }
+
+    var cred *syscall.Ucred
+    err = raw.Control(func(fd uintptr) {
+        cred, err = syscall.GetsockoptUcred(int(fd),
+            syscall.SOL_SOCKET,
+            syscall.SO_PEERCRED)
+    })
+    return cred, err
+}
+
+func checkSystemd() bool {
+	if invocationID := os.Getenv("INVOCATION_ID"); invocationID != "" {
+		ppid := os.Getppid()
+		if ppid == 1 { // NOTE: PID 1 is systemd in any linux system worth its salt
+			return true
+		}
+	}
+	return false
+}
 
 var configPath = flag.String("config", "config.yml", "YAML Configuration file.")
 
 func main() {
 	flag.Parse()
+	if !checkSystemd() {
+		log.Fatal("This program is meant to be run inside a systemd service unit context")
+	}
 
 	config, err := newConfig(*configPath)
 	if err != nil {
