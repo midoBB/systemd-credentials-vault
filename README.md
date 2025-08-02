@@ -1,6 +1,6 @@
-# Vault Credential Server
+# Systemd Vault Credential Server
 
-This Go package provides a server for retrieving credentials from HashiCorp Vault. The server listens on a Unix socket and responds to requests for specific credentials.
+This Go package provides a server for retrieving credentials from HashiCorp Vault, designed specifically to integrate with `systemd`. The server listens on a Unix socket, validates connecting processes, and responds to requests for specific credentials from whitelisted systemd services.
 
 This was the first time I've ever worked with Golang (and sockets) so please let me know where I could improve my code.
 
@@ -9,12 +9,15 @@ This was the first time I've ever worked with Golang (and sockets) so please let
 - Connects to a Vault server to fetch credentials.
 - Supports AppRole authentication method.
 - Automatically renews Vault tokens before they expire.
+- **Security**: Validates that connecting processes are managed by `systemd`.
+- **Security**: Restricts access to a whitelist of `systemd` services.
+- Supports fetching generic secrets, AppRole IDs, and dynamic/static credentials for database engines.
 
 ## Requirements
 
 - Go 1.22 or higher.
-- HashiCorp Vault & AppRole policies allowing access to secrets
-- A Unix-based system (due to the use of Unix sockets).
+- A Linux system with `systemd`.
+- HashiCorp Vault & AppRole policies allowing access to secrets.
 
 ## Configuration
 
@@ -28,9 +31,16 @@ socket_location: /run/vault-credentials.socket
 vault_mount: /secrets
 vault_approle: approle
 
-role_id: 0000-0000-0000-0000
+role_id: foo
 secret_id_name: secret_id
+
+service_whitelist:
+  - example.service
 ```
+
+**Configuration Options:**
+
+- `service_whitelist`: A list of systemd service names (e.g., `my-app.service`) that are permitted to request credentials.
 
 ## Installation
 
@@ -38,7 +48,7 @@ secret_id_name: secret_id
 
    ```sh
    git clone https://github.com/strass/systemd-credentials-vault
-   cd vault-credential-server
+   cd systemd-credentials-vault
    ```
 
 2. Build the server:
@@ -47,49 +57,44 @@ secret_id_name: secret_id
    go build .
    ```
 
-3. Run the server:
+3. Run the server (must be run from within a systemd service):
    ```sh
    ./systemd-credentials-vault -config /path/to/config.yml
    ```
 
 ## Usage
 
-The server listens on a Unix socket specified in the configuration file. It accepts connections and processes requests in the format:
+The server listens on a Unix socket and only accepts connections from whitelisted systemd-managed processes. It processes requests in the following format:
 
 ```
-<service>/<credential>
+<service>.<credential>.<key | role>
 ```
 
-or for generic secrets:
+### Request Format Details
 
-```
-<mount>/<secret-name>/<key>
-```
+- **Generic Secret**: `<mount>.<secret-name>.<key>`
+- **AppRole Role ID**: `<approle-name>.role-id.<any-string>`
+- **AppRole Secret ID**: `<approle-name>.secret-id.<any-string>`
+- **Dynamic/Static DB Creds**: `<db-mount>.<'creds'|'static-cred'>.<role-name>`
+
+**Note**: For `role-id` and `secret-id` requests, the third part of the request string is required but ignored by the server.
 
 ### Example Requests
 
-#### Via CLI
-
-- To get an AppRole Role ID:
-
-  ```
-  echo -n "myservice/role-id" | nc -U /run/vault-credentials.socket
-  ```
-
-- To get an AppRole Secret ID:
-
-  ```
-  echo -n "myservice/secret-id" | nc -U /run/vault-credentials.socket
-  ```
-
-- To get a generic secret:
-  ```
-  echo -n "secrets/app_secret/password" | nc -U /run/vault-credentials.socket
-  ```
-
 #### Via Systemd Unit
 
-LoadCredential=services.%N.secret:/run/vault-credentials.socket
+Use the `LoadCredential=` directive in your service unit file. The credential name must follow the format described above.
+
+```ini
+[Service]
+# For a generic secret
+LoadCredential=secrets.app_secret.password:/run/vault-credentials.socket
+
+# For a dynamic database credential
+LoadCredential=database.creds.my-role:/run/vault-credentials.socket
+```
+
+The credential will be available in the `CREDENTIALS_DIRECTORY` environment variable within your service.
 
 ## Testing
 

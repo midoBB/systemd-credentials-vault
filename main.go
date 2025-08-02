@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -111,6 +112,18 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 	if !isSytemdManagedProcess(ucred.Pid) {
 		log.Printf("SECURITY: Rejected non-systemd process - PID: %d, UID: %d",
 			ucred.Pid, ucred.Uid)
+		return
+	}
+
+	// get the caller unit name and cross check it with the whitelisted services
+	pInfo, pInfoErr := getProcessSystemdInfo(ucred.Pid)
+	if pInfoErr != nil {
+		log.Printf("failed to get process systemd info: %v", pInfoErr)
+		return
+	}
+
+	if !slices.Contains(vcs.config.ServiceWhitelist, pInfo.ServiceName) {
+		log.Printf("SECURITY: Rejected non-whitelisted service - %s", pInfo.ServiceName)
 		return
 	}
 	unixAddr, ok := conn.RemoteAddr().(*net.UnixAddr)
@@ -301,48 +314,6 @@ func (vcs *VaultCredentialServer) shutdown() error {
 	return nil
 }
 
-func getUcred(conn net.Conn) (*syscall.Ucred, error) {
-	raw, err := conn.(*net.UnixConn).SyscallConn()
-	if err != nil {
-		return nil, err
-	}
-
-	var cred *syscall.Ucred
-	err = raw.Control(func(fd uintptr) {
-		cred, err = syscall.GetsockoptUcred(int(fd),
-			syscall.SOL_SOCKET,
-			syscall.SO_PEERCRED)
-	})
-	return cred, err
-}
-
-func isSytemdManagedProcess(pid int32) bool {
-	cgroupPath := fmt.Sprintf("/proc/%d/cgroup", pid)
-	data, err := os.ReadFile(cgroupPath)
-	if err != nil {
-		return false
-	}
-	log.Printf("cgroup data: %s", data)
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "/system.slice/") ||
-			strings.Contains(line, "systemd") {
-			return true
-		}
-	}
-
-	return false
-}
-
-func checkSystemd() bool {
-	if invocationID := os.Getenv("INVOCATION_ID"); invocationID != "" {
-		ppid := os.Getppid()
-		if ppid == 1 { // NOTE: PID 1 is systemd in any linux system worth its salt
-			return true
-		}
-	}
-	return false
-}
 
 var configPath = flag.String("config", "config.yml", "YAML Configuration file.")
 

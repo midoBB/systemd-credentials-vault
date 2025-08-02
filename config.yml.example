@@ -5,3 +5,6 @@ vault_approle: approle
 
 role_id: foo
 secret_id_name: secret_id
+
+service_whitelist:
+  - example.service
