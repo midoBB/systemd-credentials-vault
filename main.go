@@ -101,6 +101,18 @@ func (vcs *VaultCredentialServer) startServer(ctx context.Context) error {
 
 func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
+	ucred, ucredErr := getUcred(conn)
+	if ucredErr != nil {
+		log.Printf("failed to get ucred: %v", ucredErr)
+		return
+	}
+
+	// Check if it's a systemd-managed process
+	if !isSytemdManagedProcess(ucred.Pid) {
+		log.Printf("SECURITY: Rejected non-systemd process - PID: %d, UID: %d",
+			ucred.Pid, ucred.Uid)
+		return
+	}
 	unixAddr, ok := conn.RemoteAddr().(*net.UnixAddr)
 
 	if !ok {
@@ -288,19 +300,38 @@ func (vcs *VaultCredentialServer) shutdown() error {
 	}
 	return nil
 }
-func getUcred(conn net.Conn) (*syscall.Ucred, error) {
-    raw, err := conn.(*net.UnixConn).SyscallConn()
-    if err != nil {
-        return nil, err
-    }
 
-    var cred *syscall.Ucred
-    err = raw.Control(func(fd uintptr) {
-        cred, err = syscall.GetsockoptUcred(int(fd),
-            syscall.SOL_SOCKET,
-            syscall.SO_PEERCRED)
-    })
-    return cred, err
+func getUcred(conn net.Conn) (*syscall.Ucred, error) {
+	raw, err := conn.(*net.UnixConn).SyscallConn()
+	if err != nil {
+		return nil, err
+	}
+
+	var cred *syscall.Ucred
+	err = raw.Control(func(fd uintptr) {
+		cred, err = syscall.GetsockoptUcred(int(fd),
+			syscall.SOL_SOCKET,
+			syscall.SO_PEERCRED)
+	})
+	return cred, err
+}
+
+func isSytemdManagedProcess(pid int32) bool {
+	cgroupPath := fmt.Sprintf("/proc/%d/cgroup", pid)
+	data, err := os.ReadFile(cgroupPath)
+	if err != nil {
+		return false
+	}
+	log.Printf("cgroup data: %s", data)
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "/system.slice/") ||
+			strings.Contains(line, "systemd") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func checkSystemd() bool {
