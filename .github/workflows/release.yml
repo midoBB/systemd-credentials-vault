@@ -19,26 +19,24 @@ jobs:
 
     - name: Install musl-cc toolchains
       run: |
-        # Create toolchain directory
-        mkdir -p $HOME/musl-cc
-        cd $HOME/musl-cc
 
         # Download and extract x86_64 toolchain
-        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/x86_64-linux-musl-gcc.tar.xz
-        tar -xf x86_64-linux-musl-gcc.tar.xz
+        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/x86_64-linux-musl-native.tgz
+        tar -xf x86_64-linux-musl-native.tgz
 
-        # Download and extract aarch64 toolchain
-        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/aarch64-linux-musl-gcc.tar.xz
-        tar -xf aarch64-linux-musl-gcc.tar.xz
+        # # Download and extract aarch64 toolchain
+        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/aarch64-linux-musl-cross.tgz
+        tar -xf aarch64-linux-musl-cross.tgz
+        #
+        # # Download and extract armv7 toolchain
+        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/armv7l-linux-musleabihf-cross.tgz
+        tar -xf armv7l-linux-musleabihf-cross.tgz
 
-        # Download and extract armv7 toolchain
-        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/arm-linux-musleabihf-gcc.tar.xz
-        tar -xf arm-linux-musleabihf-gcc.tar.xz
 
         # Add toolchains to PATH
-        echo "$HOME/musl-cc/x86_64-linux-musl-gcc/bin" >> $GITHUB_PATH
-        echo "$HOME/musl-cc/aarch64-linux-musl-gcc/bin" >> $GITHUB_PATH
-        echo "$HOME/musl-cc/arm-linux-musleabihf-gcc/bin" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/x86_64-linux-musl-native/bin" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/armv7l-linux-musleabihf-cross/bin" >> $GITHUB_PATH
 
     - name: Build binaries
       run: |
@@ -53,16 +51,16 @@ jobs:
           go build -ldflags="-linkmode external -extldflags '-static' -s -w -X main.version=$VERSION" \
           -o dist/systemd-credentials-vault-linux-amd64 .
 
-        # Build for aarch64
+        # # Build for aarch64
         CGO_ENABLED=1 CC=aarch64-linux-musl-gcc GOOS=linux GOARCH=arm64 \
           go build -ldflags="-linkmode external -extldflags '-static' -s -w -X main.version=$VERSION" \
           -o dist/systemd-credentials-vault-linux-arm64 .
-
-        # Build for armv7
-        CGO_ENABLED=1 CC=arm-linux-musleabihf-gcc GOOS=linux GOARCH=arm GOARM=7 \
+        #
+        # # Build for armv7
+        CGO_ENABLED=1 CC=armv7l-linux-musleabihf-gcc GOOS=linux GOARCH=arm GOARM=7 \
           go build -ldflags="-linkmode external -extldflags '-static' -s -w -X main.version=$VERSION" \
           -o dist/systemd-credentials-vault-linux-armv7 .
-
+        #
     - name: Create checksums
       run: |
         cd dist

@@ -1,4 +1,4 @@
-module github.com/strass/systemd-credentials-vault
+module github.com/midoBB/systemd-credentials-vault
 
 go 1.21.0
 
