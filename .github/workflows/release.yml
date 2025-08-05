@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '^1.21'
+
+    - name: Install musl-cc toolchains
+      run: |
+        # Create toolchain directory
+        mkdir -p $HOME/musl-cc
+        cd $HOME/musl-cc
+
+        # Download and extract x86_64 toolchain
+        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/x86_64-linux-musl-gcc.tar.xz
+        tar -xf x86_64-linux-musl-gcc.tar.xz
+
+        # Download and extract aarch64 toolchain
+        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/aarch64-linux-musl-gcc.tar.xz
+        tar -xf aarch64-linux-musl-gcc.tar.xz
+
+        # Download and extract armv7 toolchain
+        wget -q https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/arm-linux-musleabihf-gcc.tar.xz
+        tar -xf arm-linux-musleabihf-gcc.tar.xz
+
+        # Add toolchains to PATH
+        echo "$HOME/musl-cc/x86_64-linux-musl-gcc/bin" >> $GITHUB_PATH
+        echo "$HOME/musl-cc/aarch64-linux-musl-gcc/bin" >> $GITHUB_PATH
+        echo "$HOME/musl-cc/arm-linux-musleabihf-gcc/bin" >> $GITHUB_PATH
+
+    - name: Build binaries
+      run: |
+        # Get version from tag
+        VERSION=${GITHUB_REF#refs/tags/}
+
+        # Create dist directory
+        mkdir -p dist
+
+        # Build for x86_64
+        CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 \
+          go build -ldflags="-linkmode external -extldflags '-static' -s -w -X main.version=$VERSION" \
+          -o dist/systemd-credentials-vault-linux-amd64 .
+
+        # Build for aarch64
+        CGO_ENABLED=1 CC=aarch64-linux-musl-gcc GOOS=linux GOARCH=arm64 \
+          go build -ldflags="-linkmode external -extldflags '-static' -s -w -X main.version=$VERSION" \
+          -o dist/systemd-credentials-vault-linux-arm64 .
+
+        # Build for armv7
+        CGO_ENABLED=1 CC=arm-linux-musleabihf-gcc GOOS=linux GOARCH=arm GOARM=7 \
+          go build -ldflags="-linkmode external -extldflags '-static' -s -w -X main.version=$VERSION" \
+          -o dist/systemd-credentials-vault-linux-armv7 .
+
+    - name: Create checksums
+      run: |
+        cd dist
+        sha256sum systemd-credentials-vault-* > checksums.txt
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          dist/systemd-credentials-vault-linux-amd64
+          dist/systemd-credentials-vault-linux-arm64
+          dist/systemd-credentials-vault-linux-armv7
+          dist/checksums.txt
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
