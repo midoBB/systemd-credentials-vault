@@ -38,7 +38,25 @@ service_whitelist:
 
 **Configuration Options:**
 
-- `service_whitelist`: A list of systemd service names (e.g., `my-app.service`) that are permitted to request credentials.
+- `vault_server`: Address of the Vault server
+- `vault_mount`: Vault mount path for secrets
+- `vault_approle`: The AppRole mount path in Vault
+- `role_id`: The AppRole role ID for authentication
+- `secret_id_name`: Name of the secret ID file in `$CREDENTIALS_DIRECTORY`
+- `service_whitelist`: A list of systemd service names (e.g., `my-app.service`) that are permitted to request credentials
+
+### Environment Variable Overrides
+
+All configuration values can be overridden using environment variables with the `VAULT_` prefix:
+
+- `VAULT_SERVER` → `vault_server`
+- `VAULT_MOUNT` → `vault_mount`
+- `VAULT_APPROLE` → `vault_approle`
+- `VAULT_ROLE_ID` → `role_id`
+- `VAULT_SECRET_ID_NAME` → `secret_id_name`
+- `VAULT_SERVICE_WHITELIST` → `service_whitelist` (comma-separated list)
+
+Environment variables take precedence over configuration file values.
 
 ## Installation
 
