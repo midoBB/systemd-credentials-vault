@@ -60,6 +60,8 @@ Environment variables take precedence over configuration file values.
 
 ## Installation
 
+### Using Make (Recommended)
+
 1. Clone the repository:
 
    ```sh
@@ -67,16 +69,53 @@ Environment variables take precedence over configuration file values.
    cd systemd-credentials-vault
    ```
 
-2. Build the server:
+2. Build and install:
 
    ```sh
-   go build .
+   make build
+   sudo make install
    ```
 
-3. Run the server (must be run from within a systemd service):
+   This installs the binary to `/usr/local/bin/systemd-credentials-vault` and creates an example config at `/usr/local/etc/config.yml`.
+
+3. Customize the configuration:
+
    ```sh
-   ./systemd-credentials-vault -config /path/to/config.yml
+   sudo edit /usr/local/etc/config.yml
    ```
+
+### Custom Installation Path
+
+Use the `PREFIX` variable to install to a different location:
+
+```sh
+sudo make install PREFIX=/opt
+```
+
+### Available Make Commands
+
+- `make build` - Build the statically-linked binary
+- `make config` - Create `config.yml` from example
+- `make clean` - Remove build artifacts
+- `make install` - Install binary and config files
+- `make uninstall` - Remove installed binary
+- `make test` - Run tests
+- `make run` - Build and run with local config
+
+### Manual Installation
+
+If you prefer to build manually:
+
+```sh
+go build .
+```
+
+Or for a static build:
+
+```sh
+CGO_ENABLED=1 CC=x86_64-linux-musl-gcc \
+  go build -ldflags="-linkmode external -extldflags '-static' -s -w"
+```
 
 ## Usage
 

@@ -264,10 +264,26 @@ func (vcs *VaultCredentialServer) shutdown() error {
 	return nil
 }
 
-var configPath = flag.String("config", "config.yml", "YAML Configuration file.")
+var (
+	configPath = flag.String("config", "config.yml", "YAML Configuration file.")
+	showVersion = flag.Bool("version", false, "Show version information and exit.")
+	version = "dev" // Set via ldflags during build
+)
 
 func main() {
 	flag.Parse()
+	
+	if *showVersion {
+		fmt.Printf("systemd-credentials-vault %s\n", version)
+		fmt.Println()
+		fmt.Println("A systemd credentials server for HashiCorp Vault integration.")
+		fmt.Println("Uses AppRole authentication to retrieve secrets from Vault via Unix socket.")
+		fmt.Println()
+		fmt.Println("Usage:")
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
+	
 	if !checkSystemd() {
 		log.Fatal("This program is meant to be run inside a systemd service unit context")
 	}
