@@ -1,8 +1,6 @@
 # Systemd Vault Credential Server
 
-This Go package provides a server for retrieving credentials from HashiCorp Vault, designed specifically to integrate with `systemd`. The server listens on a Unix socket, validates connecting processes, and responds to requests for specific credentials from whitelisted systemd services.
-
-This was the first time I've ever worked with Golang (and sockets) so please let me know where I could improve my code.
+This Go package provides a server for retrieving credentials from HashiCorp Vault, designed specifically to integrate with `systemd`. The server uses systemd socket activation, validates connecting processes, and responds to requests for specific credentials from whitelisted systemd services.
 
 ## Features
 
@@ -11,7 +9,8 @@ This was the first time I've ever worked with Golang (and sockets) so please let
 - Automatically renews Vault tokens before they expire.
 - **Security**: Validates that connecting processes are managed by `systemd`.
 - **Security**: Restricts access to a whitelist of `systemd` services.
-- Supports fetching generic secrets, AppRole IDs, and dynamic/static credentials for database engines.
+- **Socket Activation**: Uses systemd socket activation for on-demand service startup.
+- Supports fetching generic KV secrets from Vault.
 
 ## Requirements
 
@@ -27,7 +26,6 @@ Example `config.yml`:
 
 ```yaml
 vault_server: http://localhost:8200
-socket_location: /run/vault-credentials.socket
 vault_mount: /secrets
 vault_approle: approle
 

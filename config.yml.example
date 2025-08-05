@@ -1,5 +1,4 @@
 vault_server: http://localhost:8200
-socket_location: /run/vault-credentials.socket
 vault_mount: /secrets
 vault_approle: approle
 

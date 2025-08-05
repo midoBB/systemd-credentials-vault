@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -109,3 +111,25 @@ func checkSystemd() bool {
 	}
 	return false
 }
+
+// getSocketListener returns a net.Listener for the unix socket specified by
+// the socket activation in the systemd socket activation protocol.
+func getSocketListener() (net.Listener, error) {
+    listenPID, _ := strconv.Atoi(os.Getenv("LISTEN_PID"))
+    listenFDs, _ := strconv.Atoi(os.Getenv("LISTEN_FDS"))
+    if listenPID == os.Getpid() && listenFDs > 0 {
+        const SD_LISTEN_FDS_START = 3
+        fd := SD_LISTEN_FDS_START
+        file := os.NewFile(uintptr(fd), "systemd-socket")
+        if file == nil {
+            return nil, errors.New("failed to create file from systemd socket")
+        }
+        listener, err := net.FileListener(file)
+        if err != nil {
+            return nil, fmt.Errorf("failed to create listener from systemd socket: %v", err)
+        }
+        return listener, nil
+    }
+  return nil, errors.New("not a socket activation")
+}
+

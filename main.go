@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -23,10 +22,9 @@ import (
 )
 
 type VaultCredentialServer struct {
-	socket        net.Listener
-	client        *api.Client
-	config        *Config
-	socketAddress string
+	socket net.Listener
+	client *api.Client
+	config *Config
 }
 
 func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
@@ -52,21 +50,15 @@ func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
 		return nil, errors.Wrap(err, "error creating Vault API client")
 	}
 
-	socketAddress := config.SocketLocation
-	if socketAddress == "" {
-		return nil, errors.New("Socket root not provided")
-	}
-
-	listener, err := net.Listen("unix", socketAddress)
+	listener, err := getSocketListener()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create socket: %v", err)
 	}
 
 	return &VaultCredentialServer{
-		config:        config,
-		client:        client,
-		socket:        listener,
-		socketAddress: socketAddress,
+		config: config,
+		client: client,
+		socket: listener,
 	}, nil
 }
 
@@ -99,11 +91,11 @@ func (vcs *VaultCredentialServer) startServer(ctx context.Context) error {
 				return fmt.Errorf("failed to accept connection: %v", err)
 			}
 		}
-		go vcs.handleConnection(ctx, conn)
+		go vcs.handleConnection(conn)
 	}
 }
 
-func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net.Conn) {
+func (vcs *VaultCredentialServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	ucred, ucredErr := getUcred(conn)
 	if ucredErr != nil {
@@ -166,23 +158,8 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 
 	log.Printf("Request - %s", value)
 	var err error
-	switch credential {
-	case "role-id":
-		value, err = vcs.getVaultAppRoleID(service)
-	case "secret-id":
-		value, err = vcs.getVaultAppRoleSecretID(service)
-	// How do I combine these cases?
-	case "creds":
-		mount, credType, roleName := service, credential, roleNameOrKey
-		value, err = vcs.createVaultDatabaseCreds(mount, credType, roleName)
-	case "static-cred":
-		mount, credType, roleName := service, credential, roleNameOrKey
-		value, err = vcs.createVaultDatabaseCreds(mount, credType, roleName)
-	default:
-		mount, secretName, key := service, credential, roleNameOrKey
-		value, err = vcs.getVaultServerSecret(mount, secretName, key)
-	}
-
+	mount, secretName, key := service, credential, roleNameOrKey
+	value, err = vcs.getVaultServerSecret(mount, secretName, key)
 	if err != nil {
 		log.Printf("failed to retrieve credential: %v", err)
 		return
@@ -236,37 +213,6 @@ func (vcs *VaultCredentialServer) vaultLogin(ctx context.Context) error {
 	return nil
 }
 
-func (vcs *VaultCredentialServer) getVaultAppRoleID(service string) (string, error) {
-	path := fmt.Sprintf("auth/%s/role/%s/role-id", vcs.config.VaultApprole, service)
-	secret, err := vcs.client.Logical().Read(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to get AppRole ID: %v", err)
-	}
-
-	roleID, ok := secret.Data["role_id"].(string)
-	if !ok {
-		return "", errors.New("role_id not found in response")
-	}
-
-	return roleID, nil
-}
-
-func (vcs *VaultCredentialServer) getVaultAppRoleSecretID(service string) (string, error) {
-	path := fmt.Sprintf("auth/%s/role/%s/secret-id", vcs.config.VaultApprole, service)
-
-	secret, err := vcs.client.Logical().Write(path, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to get AppRole Secret ID: %v", err)
-	}
-
-	value, ok := secret.Data["secret_id"].(string)
-	if !ok {
-		return "", fmt.Errorf("AppRole Secret ID for %s not found in secret data", service)
-	}
-
-	return value, nil
-}
-
 func (vcs *VaultCredentialServer) getVaultServerSecret(
 	mount, secretName string,
 	key string,
@@ -283,28 +229,6 @@ func (vcs *VaultCredentialServer) getVaultServerSecret(
 	return value, nil
 }
 
-func (vcs *VaultCredentialServer) createVaultDatabaseCreds(
-	mount string,
-	credType string,
-	role string,
-) (string, error) {
-	path := fmt.Sprintf("%s/%s/%s", mount, credType, role)
-	secret, err := vcs.client.Logical().Read(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to create auth for %v: %v", mount, err)
-	}
-
-	if secret == nil {
-		return "", fmt.Errorf("failed to retrieve auth for %v", mount)
-	}
-
-	value, err := json.Marshal(secret.Data)
-	if err != nil {
-		return "", fmt.Errorf("could not read secret data: %v", role)
-	}
-	return string(value), nil
-}
-
 func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.SecretID) {
 	secretID := &approle.SecretID{FromFile: vcs.config.SecretFilePath}
 
@@ -317,7 +241,6 @@ func (vcs *VaultCredentialServer) shutdown() error {
 	}
 	return nil
 }
-
 
 var configPath = flag.String("config", "config.yml", "YAML Configuration file.")
 

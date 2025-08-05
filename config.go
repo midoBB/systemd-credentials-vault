@@ -10,12 +10,11 @@ import (
 )
 
 type Config struct {
-	VaultServer      *string  `yaml:"vault_server"`    // Address of the Vault server
-	SocketLocation   string   `yaml:"socket_location"` // The base path in which Unix sockets will be created
-	VaultApprole     string   `yaml:"vault_approle"`   // The AppRole being queried
-	RoleId           string   `yaml:"role_id"`         // The role ID
-	SecretIdName     string   `yaml:"secret_id_name"`  // The path to the secret ID inside $CREDENTIALS_DIRECTORY
-	SecretFilePath   string   `yaml:"-"`               // The entire constructed path to the secret file inside $CREDENTIALS_DIRECTORY
+	VaultServer      *string  `yaml:"vault_server"`   // Address of the Vault server
+	VaultApprole     string   `yaml:"vault_approle"`  // The AppRole being queried
+	RoleId           string   `yaml:"role_id"`        // The role ID
+	SecretIdName     string   `yaml:"secret_id_name"` // The path to the secret ID inside $CREDENTIALS_DIRECTORY
+	SecretFilePath   string   `yaml:"-"`              // The entire constructed path to the secret file inside $CREDENTIALS_DIRECTORY
 	ServiceWhitelist []string `yaml:"service_whitelist"`
 }
 
