@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/awnumar/memguard"
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/api/auth/approle"
 	"github.com/pkg/errors"
@@ -22,9 +23,10 @@ import (
 )
 
 type VaultCredentialServer struct {
-	socket net.Listener
-	client *api.Client
-	config *Config
+	socket       net.Listener
+	client       *api.Client
+	config       *Config
+	secureSecret *memguard.LockedBuffer
 }
 
 func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
@@ -55,10 +57,23 @@ func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
 		return nil, fmt.Errorf("failed to create socket: %v", err)
 	}
 
+	// Load the secret during initialization
+	if config.SecretFilePath == "" {
+		return nil, errors.New("SecretFilePath not provided")
+	}
+
+	secret, err := os.ReadFile(config.SecretFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read secret file: %v", err)
+	}
+	secureSecret := memguard.NewBufferFromBytes(secret)
+	memguard.WipeBytes(secret)
+
 	return &VaultCredentialServer{
-		config: config,
-		client: client,
-		socket: listener,
+		config:       config,
+		client:       client,
+		socket:       listener,
+		secureSecret: secureSecret,
 	}, nil
 }
 
@@ -230,12 +245,19 @@ func (vcs *VaultCredentialServer) getVaultServerSecret(
 }
 
 func (vcs *VaultCredentialServer) getVaultCredentials() (string, *approle.SecretID) {
-	secretID := &approle.SecretID{FromFile: vcs.config.SecretFilePath}
+	if vcs.secureSecret == nil {
+		panic("secure secret not initialized")
+	}
 
+	secretID := &approle.SecretID{FromString: string(vcs.secureSecret.Bytes())}
 	return string(vcs.config.RoleId), secretID
 }
 
 func (vcs *VaultCredentialServer) shutdown() error {
+	if vcs.secureSecret != nil {
+		vcs.secureSecret.Destroy()
+	}
+
 	if err := vcs.socket.Close(); err != nil {
 		return fmt.Errorf("failed to close socket: %v", err)
 	}
