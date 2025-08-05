@@ -1,0 +1,23 @@
+[Unit]
+Description=Example Service Using Vault Credentials
+Documentation=https://github.com/midoBB/systemd-credentials-vault
+After=systemd-credentials-vault.service
+Wants=systemd-credentials-vault.service
+
+[Service]
+Type=exec
+# Example application that uses credentials from vault
+LoadCredential=secret.postgres.POSTGRES_USER:/run/vault-credentials.socket
+LoadCredential=secret.postgres.POSTGRES_PASSWORD:/run/vault-credentials.socket
+LoadCredential=secret.postgres.POSTGRES_DB:/run/vault-credentials.socket
+ExecStart=/bin/bash -c 'for file in "$CREDENTIALS_DIRECTORY"/*; do echo "$(basename "$file" | sed "s/.*\.//")=$(cat "$file")"; done'
+
+[Install]
+WantedBy=multi-user.target
+
+# IMPORTANT: This service name (example-consumer.service) must be added to
+# the service_whitelist in /etc/systemd-credentials-vault/config.yml:
+#
+# service_whitelist:
+#   - example-consumer.service
+#   - other-allowed.service

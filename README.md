@@ -22,7 +22,7 @@ This Go package provides a server for retrieving credentials from HashiCorp Vaul
 
 The server requires a configuration file in YAML format. The path to this file should be provided using the `-config` flag when running the server.
 
-Example `config.yml`:
+Example `config.yml` (see `contrib/config.yml.example`):
 
 ```yaml
 vault_server: http://localhost:8200
@@ -76,12 +76,12 @@ Environment variables take precedence over configuration file values.
    sudo make install
    ```
 
-   This installs the binary to `/usr/local/bin/systemd-credentials-vault` and creates an example config at `/usr/local/etc/config.yml`.
+   This installs the binary to `/usr/local/bin/systemd-credentials-vault` and creates an example config at `/usr/local/etc/systemd-credentials-vault/config.yml`.
 
 3. Customize the configuration:
 
    ```sh
-   sudo edit /usr/local/etc/config.yml
+   sudo edit /usr/local/etc/systemd-credentials-vault/config.yml
    ```
 
 ### Custom Installation Path
@@ -150,6 +150,37 @@ LoadCredential=database.creds.my-role:/run/vault-credentials.socket
 ```
 
 The credential will be available in the `CREDENTIALS_DIRECTORY` environment variable within your service.
+
+## Systemd Integration
+
+The `contrib/` directory contains systemd service files for easy deployment:
+
+- `systemd-credentials-vault.service` - Main service unit
+- `systemd-credentials-vault.socket` - Socket activation unit
+- `example-consumer.service` - Example service that uses vault credentials
+- `config.yml.example` - Example configuration file
+
+### Installing Systemd Services
+
+After building and installing the binary, copy the service files:
+
+```sh
+sudo cp contrib/systemd-credentials-vault.service /etc/systemd/system/
+sudo cp contrib/systemd-credentials-vault.socket /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable systemd-credentials-vault.socket
+sudo systemctl start systemd-credentials-vault.socket
+```
+
+**Important**: The service expects an encrypted credential file containing the Vault secret ID. Create this using systemd-creds:
+
+```sh
+echo "your-secret-id" | sudo systemd-creds encrypt --name=vault-secret-id - /etc/vault-server/secret-id.cred
+```
+
+### Example Consumer Service
+
+The `contrib/example-consumer.service` shows how to use the vault credentials in your own services. Remember to add your service name to the `service_whitelist` in the configuration file.
 
 ## Testing
 
