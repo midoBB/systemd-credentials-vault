@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"regexp"
@@ -99,24 +98,6 @@ func getUcred(conn net.Conn) (*syscall.Ucred, error) {
 			syscall.SO_PEERCRED)
 	})
 	return cred, err
-}
-
-func isSytemdManagedProcess(pid int32) bool {
-	cgroupPath := fmt.Sprintf("/proc/%d/cgroup", pid)
-	data, err := os.ReadFile(cgroupPath)
-	if err != nil {
-		return false
-	}
-	log.Printf("cgroup data: %s", data)
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "/system.slice/") ||
-			strings.Contains(line, "systemd") {
-			return true
-		}
-	}
-
-	return false
 }
 
 func checkSystemd() bool {

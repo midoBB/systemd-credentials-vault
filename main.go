@@ -35,14 +35,17 @@ func NewVaultCredentialServer(config *Config) (*VaultCredentialServer, error) {
 		apiConfig.Address = *config.VaultServer
 	}
 
-	// If no CREDENTIALS_DIRECTORY is provided exit with an error
-	if _, ok := os.LookupEnv("CREDENTIALS_DIRECTORY"); !ok {
+	credsDir, ok := os.LookupEnv("CREDENTIALS_DIRECTORY")
+	if !ok {
 		return nil, errors.New(
 			"CREDENTIALS_DIRECTORY not provided, This program is meant to be run inside a systemd service unit context",
 		)
 	}
+	if _, err := os.Stat(credsDir); os.IsNotExist(err) {
+		return nil, errors.Errorf("CREDENTIALS_DIRECTORY does not exist: %s", credsDir)
+	}
 
-	config.SecretFilePath = filepath.Join(os.Getenv("CREDENTIALS_DIRECTORY"), config.SecretIdName)
+	config.SecretFilePath = filepath.Join(credsDir, config.SecretIdName)
 
 	client, err := api.NewClient(apiConfig)
 	if err != nil {
@@ -108,17 +111,16 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 		return
 	}
 
-	// Check if it's a systemd-managed process
-	if !isSytemdManagedProcess(ucred.Pid) {
-		log.Printf("SECURITY: Rejected non-systemd process - PID: %d, UID: %d",
-			ucred.Pid, ucred.Uid)
-		return
-	}
-
 	// get the caller unit name and cross check it with the whitelisted services
 	pInfo, pInfoErr := getProcessSystemdInfo(ucred.Pid)
 	if pInfoErr != nil {
 		log.Printf("failed to get process systemd info: %v", pInfoErr)
+		return
+	}
+
+	if pInfo.Type == ProcessTypeUnknown {
+		log.Printf("SECURITY: Rejected non-systemd process - PID: %d, UID: %d",
+			ucred.Pid, ucred.Uid)
 		return
 	}
 
@@ -186,7 +188,9 @@ func (vcs *VaultCredentialServer) handleConnection(ctx context.Context, conn net
 		return
 	}
 
-	_, _ = conn.Write([]byte(value)) // XXX: Is it safe to ignore the error here?
+	if _, err := conn.Write([]byte(value)); err != nil {
+		log.Printf("failed to write credential to connection: %v", err)
+	}
 }
 
 // parsePeerName parses the peer name of a unix socket connection as per the
@@ -343,7 +347,9 @@ func main() {
 		sig := <-sigCh
 		log.Printf("Received signal: %s, shutting down...", sig)
 		context.CancelFunc(cancel)()
-		_ = server.shutdown() // XXX: Is it safe to ignore the error here?
+		if err := server.shutdown(); err != nil {
+			log.Printf("error during shutdown: %v", err)
+		}
 		cancel()
 	}()
 
